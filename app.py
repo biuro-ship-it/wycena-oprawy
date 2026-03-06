@@ -1,110 +1,98 @@
 import streamlit as st
 import pandas as pd
 import re
+import os
 
-st.set_page_config(page_title="Eurorama v5.6", page_icon="🖼️")
+st.set_page_config(page_title="Eurorama v5.7", page_icon="🖼️")
 
-# Inicjalizacja pamięci sesji (czyszczenie pól)
 if 'input_val' not in st.session_state:
     st.session_state.input_val = ""
 
 def reset_fields():
     st.session_state.input_val = ""
 
-st.title("🖼️ Kalkulator Eurorama v5.6")
+st.title("🖼️ Kalkulator Eurorama v5.7")
 
-# Stałe (Marża i VAT)
+# Stałe
 MARZA = 1.50
 VAT = 1.23
+DEFAULT_FILE = "cennik.csv"  # Nazwa pliku, który wrzucisz na GitHub
 
-# Funkcja czyszcząca kody
 def clean_code(x):
     if pd.isna(x): return ""
-    # Usuwa .0 jeśli Excel zrobił z kodu liczbę
     val = str(x).strip().lower()
     if val.endswith('.0'): val = val[:-2]
     return val
 
-# --- PANEL BOCZNY: CENNIK ---
+# --- LOGIKA WCZYTYWANIA ---
 st.sidebar.header("Baza Danych")
-uploaded_file = st.sidebar.file_uploader("Wgraj plik (cennik eurorama.xlsx - Arkusz1.csv)", type=['csv', 'xlsx', 'ods'])
+uploaded_file = st.sidebar.file_uploader("Wgraj nowy cennik (opcjonalnie)", type=['csv', 'xlsx', 'ods'])
 
+# Wybór źródła danych: albo wgrany plik, albo plik z GitHuba
+source = None
 if uploaded_file:
+    source = uploaded_file
+elif os.path.exists(DEFAULT_FILE):
+    source = DEFAULT_FILE
+    st.sidebar.info("✅ Korzystam z zapisanego cennika")
+
+if source:
     try:
-        # Wczytanie CSV lub Excel
-        if uploaded_file.name.endswith('.csv'):
-            df_raw = pd.read_csv(uploaded_file, header=None)
+        if isinstance(source, str): # Jeśli czytamy z pliku na GitHub
+            df_raw = pd.read_csv(source, header=None)
+        elif source.name.endswith('.csv'):
+            df_raw = pd.read_csv(source, header=None)
         else:
-            df_raw = pd.read_excel(uploaded_file, header=None)
+            df_raw = pd.read_excel(source, header=None)
         
         db = {}
-        s_netto = 43.0 # Domyślna cena szkła
-        h_netto = 30.0 # Domyślna cena HDF
+        s_netto, h_netto = 43.0, 30.0
 
         for _, row in df_raw.iterrows():
             try:
-                # Kolumna 0 to KOD/Nazwa
                 k = clean_code(row[0])
                 if not k or "kolumna" in k or "profil" in k: continue
-
-                # Wyłapywanie cen Szkła i HDF
                 if 'szkło' in k or 'szklo' in k:
                     s_netto = float(str(row[2]).replace(',', '.'))
                     continue
                 if 'hdf' in k:
                     h_netto = float(str(row[2]).replace(',', '.'))
                     continue
-
-                # Cena (Indeks 2), Szerokość (Indeks 4)
                 c = float(str(row[2]).replace(',', '.'))
                 sz = float(str(row[4]).replace(',', '.')) if len(row) > 4 and pd.notna(row[4]) else 0.0
-                
                 db[k] = {"cena": c, "szer": sz}
-            except:
-                continue
+            except: continue
 
         st.sidebar.success(f"Baza: {len(db)} kodów")
-        st.sidebar.info(f"Szkło: {s_netto} zł | HDF: {h_netto} zł")
-
-        # --- GŁÓWNY PANEL: WYCENA ---
-        komenda = st.text_input("Podaj kod i wymiary (np. 34 50 60):", key="input_val", placeholder="Mów lub pisz...")
+        
+        # --- INTERFEJS WYCENY ---
+        st.write("---")
+        komenda = st.text_input("Podaj kod i wymiary:", key="input_val", placeholder="Mów lub pisz...")
         
         c1, c2 = st.columns(2)
-        wycen_btn = c1.button("🚀 WYCENA", use_container_width=True)
-        nowa_btn = c2.button("🧹 NOWA WYCENA", on_click=reset_fields, use_container_width=True)
-
-        if wycen_btn and komenda:
+        if c1.button("🚀 WYCENA", use_container_width=True) and komenda:
             liczby = re.findall(r'\d+', komenda)
             if len(liczby) >= 2:
                 kod_u = liczby[0].lower()
-                szer = float(liczby[1])
-                wys = float(liczby[2]) if len(liczby) > 2 else szer
+                szer, wys = float(liczby[1]), float(liczby[2]) if len(liczby) > 2 else float(liczby[1])
                 
-                # Szukanie w bazie
                 if kod_u in db:
                     item = db[kod_u]
-                    
-                    # Logika: Obwód + 8x szerokość (odpad na skosy)
                     obwod_m = ((2 * szer) + (2 * wys) + (8 * item['szer'])) / 100
-                    cena_rama = (obwod_m * item['cena']) * MARZA * VAT
+                    cena_r = (obwod_m * item['cena']) * MARZA * VAT
+                    cena_c = cena_r + ((szer * wys) / 10000 * (s_netto + h_netto) * MARZA * VAT)
                     
-                    # Logika: Pole powierzchni m2
-                    m2 = (szer * wys) / 10000
-                    cena_calosc = cena_rama + (m2 * (s_netto + h_netto) * MARZA * VAT)
-                    
-                    # Wyświetlanie wyników
                     st.divider()
-                    st.subheader(f"Wycena dla kodu: {kod_u.upper()}")
+                    st.subheader(f"Wycena: {kod_u.upper()}")
                     res_c1, res_c2 = st.columns(2)
-                    res_c1.metric("SAMA RAMA", f"{cena_rama:.2f} zł")
-                    res_c2.metric("PEŁNA OPRAWA", f"{cena_calosc:.2f} zł")
-                    st.caption(f"Wymiary: {szer}x{wys} cm | Szerokość listwy: {item['szer']} cm")
+                    res_c1.metric("SAMA RAMA", f"{cena_r:.2f} zł")
+                    res_c2.metric("PEŁNA OPRAWA", f"{cena_c:.2f} zł")
                 else:
-                    st.error(f"Nie znaleziono kodu {kod_u} w bazie danych.")
-            else:
-                st.warning("Podaj minimum kod i szerokość obrazu.")
+                    st.error(f"Brak kodu {kod_u}")
+        
+        c2.button("🧹 NOWA", on_click=reset_fields, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Błąd pliku: {e}")
+        st.error(f"Błąd: {e}")
 else:
-    st.info("👈 Wgraj plik cennika w panelu bocznym.")
+    st.info("👈 Wgraj plik lub dodaj 'cennik.csv' do swojego GitHub'a.")
