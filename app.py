@@ -19,12 +19,27 @@ def clear_data():
     st.session_state.input_text = ""
     st.rerun()
 
-# Stylizacja
+# Stylizacja CSS
 st.markdown("""
     <style>
     .main { background-color: #f1f3f6; }
     .stButton>button { width: 100%; border-radius: 10px; height: 3em; font-weight: bold; }
-    .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: white; text-align: center; padding: 10px; border-top: 1px solid #ddd; z-index: 100; }
+    
+    /* POPRAWKA STOPKI */
+    .footer { 
+        position: fixed; 
+        left: 0; 
+        bottom: 0; 
+        width: 100%; 
+        background-color: white; 
+        text-align: center; 
+        padding: 10px; 
+        border-top: 2px solid #1e3a8a; 
+        z-index: 100; 
+        color: #333; /* Ciemny tekst */
+    }
+    .footer b { color: #1e3a8a; } /* Numer telefonu na granatowo */
+    
     .metric-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
@@ -48,7 +63,7 @@ def load_db():
     if not os.path.exists(DEFAULT_FILE):
         return None
     try:
-        # Próba wczytania z automatycznym separatorem i polskim kodowaniem
+        # Automatyczny separator i polskie kodowanie
         df = pd.read_csv(DEFAULT_FILE, header=None, sep=None, engine='python', encoding='cp1250')
         data = {}
         for _, row in df.iterrows():
@@ -70,7 +85,6 @@ db = load_db()
 # --- 5. INTERFEJS GŁÓWNY ---
 st.header("🖼️ Eurorama Twój Dostawca Ram")
 
-# Panel wejściowy
 with st.container():
     col_a, col_b = st.columns([2, 1])
     
@@ -96,7 +110,7 @@ do_clear = btn_col2.button("🧹 NOWA WYCENA", on_click=clear_data)
 # --- 6. OBLICZENIA I WYNIKI ---
 if do_calc and user_input:
     if not db:
-        st.error("Błąd: Cennik nie został wgrany lub ma zły format.")
+        st.error("Błąd: Cennik nie został wgrany lub brak pliku cennik.csv.")
     else:
         nums = re.findall(r'\d+', user_input)
         if len(nums) >= 2:
@@ -107,47 +121,44 @@ if do_calc and user_input:
             if kod in db:
                 item = db[kod]
                 
-                # MATERIAŁY (Punkt 2)
+                # MATERIAŁY
                 mb_potrzebne = ((2 * szer) + (2 * wys) + (8 * item['sz'])) / 100
                 m2_powierzchnia = (szer * wys) / 10000
                 
                 st.info(f"### Dane materiałowe: {kod.upper()} | {szer}x{wys} cm")
                 m_res1, m_res2 = st.columns(2)
-                m_res1.write(f"📏 **Potrzebna listwa:** {mb_potrzebne:.2f} mb (z odpadem)")
+                m_res1.write(f"📏 **Potrzebna listwa:** {mb_potrzebne:.2f} mb")
                 m_res2.write(f"⬜ **Powierzchnia obrazu:** {m2_powierzchnia:.4f} m²")
 
-                # KALKULACJA (Punkt 3, 4, 6)
-                # Producent (Cena z cennika * metry * VAT 23%)
+                # KALKULACJA (Cena Prod + VAT -> Marża -> Dodatki)
                 cena_prod_l = (mb_potrzebne * item['cl']) * VAT
                 cena_prod_r = (mb_potrzebne * item['cr']) * VAT
                 
-                # Klient (Cena producenta * Marża + Koszt dodatkowy)
                 cena_klient_l = (cena_prod_l * (1 + m_l/100)) + extra_l
                 cena_klient_r = (cena_prod_r * (1 + m_r/100)) + extra_r
 
                 st.divider()
                 
                 res_l, res_r = st.columns(2)
-                
                 with res_l:
                     st.markdown("### 📦 CENA: LISTWA")
-                    st.write(f"Cena u producenta (+VAT): {cena_prod_l:.2f} zł")
-                    st.write(f"Marża: {m_l}% | Dodatki: {extra_l} zł")
+                    st.write(f"Producent (+VAT): {cena_prod_l:.2f} zł")
                     st.success(f"## **DO ZAPŁATY: {cena_klient_l:.2f} zł**")
                     
                 with res_r:
                     st.markdown("### 🖼️ CENA: W RAMIE")
-                    st.write(f"Cena u producenta (+VAT): {cena_prod_r:.2f} zł")
-                    st.write(f"Marża: {m_r}% | Dodatki: {extra_r} zł")
+                    st.write(f"Producent (+VAT): {cena_prod_r:.2f} zł")
                     st.error(f"## **DO ZAPŁATY: {cena_klient_r:.2f} zł**")
             else:
                 st.error(f"Nie znaleziono kodu {kod} w bazie.")
         else:
-            st.warning("Wpisz kod i wymiary (np. 34 50 60)")
+            st.warning("Podaj kod i wymiary.")
 
-# --- 7. STOPKA ---
+# --- 7. STOPKA Z WIDOCZNYM NUMEREM ---
 st.markdown(f"""
     <div class="footer">
-        <p>📞 Zadzwoń do nas: <b>15 876 30 16</b></p>
+        <p style="margin:0; font-size:1.1em;">
+            📞 Zadzwoń do nas: <b>15 876 30 16</b>
+        </p>
     </div>
     """, unsafe_allow_html=True)
