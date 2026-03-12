@@ -9,15 +9,16 @@ st.set_page_config(page_title="Eurorama Twój Dostawca Ram", page_icon="🖼️"
 # --- 2. PARAMETRY I HASŁO ---
 VAT = 1.23
 DEFAULT_FILE = "cennik.csv"
-HASLO_ADMINA = "Admin123"  # <--- TUTAJ WPISZ SWOJE HASŁO
+HASLO_ADMINA = "Admin123"  # <--- TWOJE HASŁO
 
-# Inicjalizacja pamięci sesji (czyszczenie pól)
+# Inicjalizacja pamięci sesji
 if 'input_text' not in st.session_state:
     st.session_state.input_text = ""
 
+# POPRAWIONA FUNKCJA CZYSZCZENIA
 def clear_data():
     st.session_state.input_text = ""
-    st.rerun()
+    # st.rerun() został usunięty, bo Streamlit sam odświeży stronę po wyjściu z tej funkcji
 
 # Stylizacja CSS
 st.markdown("""
@@ -25,7 +26,6 @@ st.markdown("""
     .main { background-color: #f1f3f6; }
     .stButton>button { width: 100%; border-radius: 10px; height: 3em; font-weight: bold; }
     
-    /* POPRAWKA STOPKI */
     .footer { 
         position: fixed; 
         left: 0; 
@@ -36,11 +36,9 @@ st.markdown("""
         padding: 10px; 
         border-top: 2px solid #1e3a8a; 
         z-index: 100; 
-        color: #333; /* Ciemny tekst */
+        color: #333; 
     }
-    .footer b { color: #1e3a8a; } /* Numer telefonu na granatowo */
-    
-    .metric-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .footer b { color: #1e3a8a; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -54,7 +52,7 @@ if pass_input == HASLO_ADMINA:
     if up_file:
         with open(DEFAULT_FILE, "wb") as f:
             f.write(up_file.getbuffer())
-        st.sidebar.info("Cennik został zaktualizowany!")
+        st.sidebar.info("Cennik zaktualizowany!")
 elif pass_input != "":
     st.sidebar.error("Błędne hasło")
 
@@ -63,12 +61,10 @@ def load_db():
     if not os.path.exists(DEFAULT_FILE):
         return None
     try:
-        # Automatyczny separator i polskie kodowanie
         df = pd.read_csv(DEFAULT_FILE, header=None, sep=None, engine='python', encoding='cp1250')
         data = {}
         for _, row in df.iterrows():
             try:
-                # Kol 0: Kod, Kol 2: Cena Listwa, Kol 3: Cena Rama, Kol 4: Szerokość
                 k = str(row[0]).strip().lower()
                 if k.endswith('.0'): k = k[:-2]
                 c_l = float(str(row[2]).replace(',', '.'))
@@ -77,8 +73,7 @@ def load_db():
                 data[k] = {"cl": c_l, "cr": c_r, "sz": sz}
             except: continue
         return data
-    except:
-        return None
+    except: return None
 
 db = load_db()
 
@@ -87,8 +82,8 @@ st.header("🖼️ Eurorama Twój Dostawca Ram")
 
 with st.container():
     col_a, col_b = st.columns([2, 1])
-    
     with col_a:
+        # Podpinamy session_state bezpośrednio pod pole
         user_input = st.text_input("Podaj kod i wymiary (np. 34 50 60)", key="input_text")
     
     with col_b:
@@ -108,11 +103,11 @@ do_calc = btn_col1.button("🚀 WYCEŃ", type="primary")
 do_clear = btn_col2.button("🧹 NOWA WYCENA", on_click=clear_data)
 
 # --- 6. OBLICZENIA I WYNIKI ---
-if do_calc and user_input:
+if do_calc and st.session_state.input_text:
     if not db:
-        st.error("Błąd: Cennik nie został wgrany lub brak pliku cennik.csv.")
+        st.error("Błąd: Cennik nie został wgrany.")
     else:
-        nums = re.findall(r'\d+', user_input)
+        nums = re.findall(r'\d+', st.session_state.input_text)
         if len(nums) >= 2:
             kod = nums[0].lower()
             szer = float(nums[1])
@@ -120,45 +115,37 @@ if do_calc and user_input:
             
             if kod in db:
                 item = db[kod]
-                
-                # MATERIAŁY
-                mb_potrzebne = ((2 * szer) + (2 * wys) + (8 * item['sz'])) / 100
-                m2_powierzchnia = (szer * wys) / 10000
+                mb_pot = ((2 * szer) + (2 * wys) + (8 * item['sz'])) / 100
+                m2_pow = (szer * wys) / 10000
                 
                 st.info(f"### Dane materiałowe: {kod.upper()} | {szer}x{wys} cm")
                 m_res1, m_res2 = st.columns(2)
-                m_res1.write(f"📏 **Potrzebna listwa:** {mb_potrzebne:.2f} mb")
-                m_res2.write(f"⬜ **Powierzchnia obrazu:** {m2_powierzchnia:.4f} m²")
+                m_res1.write(f"📏 **Potrzebna listwa:** {mb_pot:.2f} mb")
+                m_res2.write(f"⬜ **Powierzchnia obrazu:** {m2_pow:.4f} m²")
 
-                # KALKULACJA (Cena Prod + VAT -> Marża -> Dodatki)
-                cena_prod_l = (mb_potrzebne * item['cl']) * VAT
-                cena_prod_r = (mb_potrzebne * item['cr']) * VAT
+                # Kalkulacja
+                c_p_l = (mb_pot * item['cl']) * VAT
+                c_p_r = (mb_pot * item['cr']) * VAT
                 
-                cena_klient_l = (cena_prod_l * (1 + m_l/100)) + extra_l
-                cena_klient_r = (cena_prod_r * (1 + m_r/100)) + extra_r
+                c_k_l = (c_p_l * (1 + m_l/100)) + extra_l
+                c_k_r = (c_p_r * (1 + m_r/100)) + extra_r
 
                 st.divider()
-                
                 res_l, res_r = st.columns(2)
                 with res_l:
                     st.markdown("### 📦 CENA: LISTWA")
-                    st.write(f"Producent (+VAT): {cena_prod_l:.2f} zł")
-                    st.success(f"## **DO ZAPŁATY: {cena_klient_l:.2f} zł**")
-                    
+                    st.write(f"Producent (+VAT): {c_p_l:.2f} zł")
+                    st.success(f"## **DO ZAPŁATY: {c_k_l:.2f} zł**")
                 with res_r:
                     st.markdown("### 🖼️ CENA: W RAMIE")
-                    st.write(f"Producent (+VAT): {cena_prod_r:.2f} zł")
-                    st.error(f"## **DO ZAPŁATY: {cena_klient_r:.2f} zł**")
+                    st.write(f"Producent (+VAT): {c_p_r:.2f} zł")
+                    st.error(f"## **DO ZAPŁATY: {c_k_r:.2f} zł**")
             else:
-                st.error(f"Nie znaleziono kodu {kod} w bazie.")
-        else:
-            st.warning("Podaj kod i wymiary.")
+                st.error(f"Nie znaleziono kodu {kod}")
 
-# --- 7. STOPKA Z WIDOCZNYM NUMEREM ---
+# --- 7. STOPKA ---
 st.markdown(f"""
     <div class="footer">
-        <p style="margin:0; font-size:1.1em;">
-            📞 Zadzwoń do nas: <b>15 876 30 16</b>
-        </p>
+        <p style="margin:0; font-size:1.1em;">📞 Zadzwoń do nas: <b>15 876 30 16</b></p>
     </div>
     """, unsafe_allow_html=True)
