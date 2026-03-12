@@ -3,146 +3,149 @@ import pandas as pd
 import re
 import os
 
-# --- KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Eurorama - Kalkulator", page_icon="🖼️", layout="wide")
+# --- 1. KONFIGURACJA STRONY ---
+st.set_page_config(page_title="Eurorama Twój Dostawca Ram", page_icon="🖼️", layout="wide")
 
-# --- PARAMETRY I STAŁE ---
+# --- 2. PARAMETRY I HASŁO ---
 VAT = 1.23
 DEFAULT_FILE = "cennik.csv"
-HASLO_ADMINA = "Daniel"  # <--- ZMIEŃ TO HASŁO NA WŁASNE
+HASLO_ADMINA = "Admin123"  # <--- TUTAJ WPISZ SWOJE HASŁO
 
-# Style CSS dla lepszego wyglądu
+# Inicjalizacja pamięci sesji (czyszczenie pól)
+if 'input_text' not in st.session_state:
+    st.session_state.input_text = ""
+
+def clear_data():
+    st.session_state.input_text = ""
+    st.rerun()
+
+# Stylizacja
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .main { background-color: #f1f3f6; }
+    .stButton>button { width: 100%; border-radius: 10px; height: 3em; font-weight: bold; }
     .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: white; text-align: center; padding: 10px; border-top: 1px solid #ddd; z-index: 100; }
+    .metric-box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🖼️ Eurorama Twój Dostawca Ram")
+# --- 3. PANEL ADMINISTRACYJNY ---
+st.sidebar.header("🔐 Panel Administracyjny")
+pass_input = st.sidebar.text_input("Hasło", type="password")
 
-# --- FUNKCJE POMOCNICZE ---
-def clean_code(x):
-    if pd.isna(x) or str(x).strip() == "": return ""
-    val = str(x).strip().lower()
-    if val.endswith('.0'): val = val[:-2]
-    return val
-
-def load_data(source):
-    encodings = ['utf-8', 'cp1250', 'iso-8859-2']
-    for enc in encodings:
-        try:
-            return pd.read_csv(source, header=None, encoding=enc, sep=None, engine='python', on_bad_lines='skip')
-        except: continue
-    return pd.read_excel(source, header=None)
-
-# --- PANEL ADMINISTRACYJNY (HASŁO) ---
-st.sidebar.header("🔐 Panel Admina")
-haslo_input = st.sidebar.text_input("Hasło dostępu", type="password")
-
-if haslo_input == HASLO_ADMINA:
-    st.sidebar.success("Zalogowano pomyślnie")
-    uploaded_file = st.sidebar.file_uploader("Zaktualizuj cennik (CSV/XLSX)", type=['csv', 'xlsx'])
-    if uploaded_file:
+if pass_input == HASLO_ADMINA:
+    st.sidebar.success("Dostęp przyznany")
+    up_file = st.sidebar.file_uploader("Wgraj nowy cennik (CSV)", type=['csv'])
+    if up_file:
         with open(DEFAULT_FILE, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        st.sidebar.info("Plik zapisany jako bazowy cennik.")
-else:
-    if haslo_input != "":
-        st.sidebar.error("Błędne hasło")
+            f.write(up_file.getbuffer())
+        st.sidebar.info("Cennik został zaktualizowany!")
+elif pass_input != "":
+    st.sidebar.error("Błędne hasło")
 
-# --- ŁADOWANIE CENNIKA ---
-source = DEFAULT_FILE if os.path.exists(DEFAULT_FILE) else None
-db = {}
-
-if source:
+# --- 4. ŁADOWANIE DANYCH ---
+def load_db():
+    if not os.path.exists(DEFAULT_FILE):
+        return None
     try:
-        df_raw = load_data(source)
-        for _, row in df_raw.iterrows():
+        # Próba wczytania z automatycznym separatorem i polskim kodowaniem
+        df = pd.read_csv(DEFAULT_FILE, header=None, sep=None, engine='python', encoding='cp1250')
+        data = {}
+        for _, row in df.iterrows():
             try:
-                k = clean_code(row[0])
-                if not k or "kolumna" in k or "profil" in k: continue
-                # Kolumna 2: Cena mb listwa | Kolumna 3: Cena mb rama | Kolumna 4: Szerokość profilu
-                c_listwa = float(str(row[2]).replace(',', '.').strip())
-                c_rama = float(str(row[3]).replace(',', '.').strip())
-                szer = float(str(row[4]).replace(',', '.').strip()) if len(row) > 4 else 0.0
-                db[k] = {"cena_listwa": c_listwa, "cena_rama": c_rama, "szer": szer}
+                # Kol 0: Kod, Kol 2: Cena Listwa, Kol 3: Cena Rama, Kol 4: Szerokość
+                k = str(row[0]).strip().lower()
+                if k.endswith('.0'): k = k[:-2]
+                c_l = float(str(row[2]).replace(',', '.'))
+                c_r = float(str(row[3]).replace(',', '.'))
+                sz = float(str(row[4]).replace(',', '.'))
+                data[k] = {"cl": c_l, "cr": c_r, "sz": sz}
             except: continue
-    except Exception as e:
-        st.error(f"Problem z bazą: {e}")
+        return data
+    except:
+        return None
 
-# --- INTERFEJS WYCENY ---
-if db:
-    # 1. Wprowadzanie danych
-    st.subheader("🛠️ Parametry oprawy")
-    col_inp1, col_inp2 = st.columns(2)
+db = load_db()
+
+# --- 5. INTERFEJS GŁÓWNY ---
+st.header("🖼️ Eurorama Twój Dostawca Ram")
+
+# Panel wejściowy
+with st.container():
+    col_a, col_b = st.columns([2, 1])
     
-    with col_inp1:
-        komenda = st.text_input("Dyktuj kod i wymiary (np. 34 50x60)", placeholder="Kod i wymiary w cm...")
+    with col_a:
+        user_input = st.text_input("Podaj kod i wymiary (np. 34 50 60)", key="input_text")
     
-    with col_inp2:
-        st.write("Dostosuj marże [%]:")
-        cm1, cm2 = st.columns(2)
-        marza_listwa = cm1.number_input("Marża Listwa", value=50)
-        marza_rama = cm2.number_input("Marża Rama", value=35)
+    with col_b:
+        st.write("Marże [%]:")
+        m_cols = st.columns(2)
+        m_l = m_cols[0].number_input("Listwa", value=50)
+        m_r = m_cols[1].number_input("Rama", value=35)
 
-    with st.expander("➕ Koszty dodatkowe (np. szkło, transport)"):
-        cad1, cad2 = st.columns(2)
-        dodatek1 = cad1.number_input("Dodatek do listwy [zł]", value=0.0)
-        dodatek2 = cad2.number_input("Dodatek do ramy [zł]", value=0.0)
+with st.expander("💰 Dodatkowe koszty (opcjonalnie)"):
+    add_cols = st.columns(2)
+    extra_l = add_cols[0].number_input("Koszt do listwy [zł]", value=0.0)
+    extra_r = add_cols[1].number_input("Koszt do ramy [zł]", value=0.0)
 
-    # 2. Obliczenia
-    if komenda:
-        liczby = re.findall(r'\d+', komenda)
-        if len(liczby) >= 2:
-            kod_u = liczby[0].lower().lstrip('0') or "0"
-            szer_ob = float(liczby[1])
-            wys_ob = float(liczby[2]) if len(liczby) > 2 else szer_ob
+# PRZYCISKI
+btn_col1, btn_col2 = st.columns(2)
+do_calc = btn_col1.button("🚀 WYCEŃ", type="primary")
+do_clear = btn_col2.button("🧹 NOWA WYCENA", on_click=clear_data)
+
+# --- 6. OBLICZENIA I WYNIKI ---
+if do_calc and user_input:
+    if not db:
+        st.error("Błąd: Cennik nie został wgrany lub ma zły format.")
+    else:
+        nums = re.findall(r'\d+', user_input)
+        if len(nums) >= 2:
+            kod = nums[0].lower()
+            szer = float(nums[1])
+            wys = float(nums[2]) if len(nums) > 2 else szer
             
-            if kod_u in db:
-                item = db[kod_u]
+            if kod in db:
+                item = db[kod]
                 
-                # MATERIAŁY
-                total_mb = ((2 * szer_ob) + (2 * wys_ob) + (8 * item['szer'])) / 100
-                total_m2 = (szer_ob * wys_ob) / 10000
+                # MATERIAŁY (Punkt 2)
+                mb_potrzebne = ((2 * szer) + (2 * wys) + (8 * item['sz'])) / 100
+                m2_powierzchnia = (szer * wys) / 10000
                 
-                st.success(f"### Obliczenia dla: Profil {kod_u.upper()} | {szer_ob} x {wys_ob} cm")
-                
-                # Wyświetlanie ilości materiału
-                m_col1, m_col2 = st.columns(2)
-                m_col1.write(f"📏 **Potrzebna listwa:** {total_mb:.2f} mb")
-                m_col2.write(f"⬜ **Powierzchnia obrazu:** {total_m2:.3f} m²")
+                st.info(f"### Dane materiałowe: {kod.upper()} | {szer}x{wys} cm")
+                m_res1, m_res2 = st.columns(2)
+                m_res1.write(f"📏 **Potrzebna listwa:** {mb_potrzebne:.2f} mb (z odpadem)")
+                m_res2.write(f"⬜ **Powierzchnia obrazu:** {m2_powierzchnia:.4f} m²")
 
-                # KALKULACJE CENOWE
-                # Ceny u producenta + VAT 23%
-                prod_listwa_brutto = (total_mb * item['cena_listwa']) * VAT
-                prod_rama_brutto = (total_mb * item['cena_rama']) * VAT
+                # KALKULACJA (Punkt 3, 4, 6)
+                # Producent (Cena z cennika * metry * VAT 23%)
+                cena_prod_l = (mb_potrzebne * item['cl']) * VAT
+                cena_prod_r = (mb_potrzebne * item['cr']) * VAT
                 
-                # Ceny końcowe (z marżą i dodatkami)
-                final_listwa = (prod_listwa_brutto * (1 + marza_listwa/100)) + dodatek1
-                final_rama = (prod_rama_brutto * (1 + marza_rama/100)) + dodatek2
+                # Klient (Cena producenta * Marża + Koszt dodatkowy)
+                cena_klient_l = (cena_prod_l * (1 + m_l/100)) + extra_l
+                cena_klient_r = (cena_prod_r * (1 + m_r/100)) + extra_r
 
                 st.divider()
                 
-                # TABELA WYNIKÓW
-                res_col1, res_col2 = st.columns(2)
+                res_l, res_r = st.columns(2)
                 
-                with res_col1:
-                    st.subheader("📦 Opcja: SAMA LISTWA")
-                    st.write(f"Cena producenta (z VAT): **{prod_listwa_brutto:.2f} zł**")
-                    st.metric("DO ZAPŁATY (Twoja cena)", f"{final_listwa:.2f} zł", delta=f"Marża {marza_listwa}%")
+                with res_l:
+                    st.markdown("### 📦 CENA: LISTWA")
+                    st.write(f"Cena u producenta (+VAT): {cena_prod_l:.2f} zł")
+                    st.write(f"Marża: {m_l}% | Dodatki: {extra_l} zł")
+                    st.success(f"## **DO ZAPŁATY: {cena_klient_l:.2f} zł**")
                     
-                with res_col2:
-                    st.subheader("🖼️ Opcja: GOTOWA RAMA")
-                    st.write(f"Cena producenta (z VAT): **{prod_rama_brutto:.2f} zł**")
-                    st.metric("DO ZAPŁATY (Twoja cena)", f"{final_rama:.2f} zł", delta=f"Marża {marza_rama}%")
+                with res_r:
+                    st.markdown("### 🖼️ CENA: W RAMIE")
+                    st.write(f"Cena u producenta (+VAT): {cena_prod_r:.2f} zł")
+                    st.write(f"Marża: {m_r}% | Dodatki: {extra_r} zł")
+                    st.error(f"## **DO ZAPŁATY: {cena_klient_r:.2f} zł**")
             else:
-                st.error(f"Nie znaleziono kodu {kod_u} w bazie.")
-else:
-    st.warning("Zaloguj się do panelu admina i wgraj plik cennik.csv")
+                st.error(f"Nie znaleziono kodu {kod} w bazie.")
+        else:
+            st.warning("Wpisz kod i wymiary (np. 34 50 60)")
 
-# --- STOPKA ---
+# --- 7. STOPKA ---
 st.markdown(f"""
     <div class="footer">
         <p>📞 Zadzwoń do nas: <b>15 876 30 16</b></p>
