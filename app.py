@@ -116,8 +116,8 @@ with col2:
     wycena_date = st.date_input("Data wyceny", date.today())
 
 m_col1, m_col2 = st.columns(2)
-mar_l = m_col1.number_input("Marża Listwa [%]", value=50)
-mar_r = m_col2.number_input("Marża Rama [%]", value=35)
+mar_l = m_col1.number_input("Marża Listwa [%]", value=60)
+mar_r = m_col2.number_input("Marża Rama [%]", value=45)
 
 with st.expander("💰 Dodatki i Uwagi"):
     e1, e2 = st.columns(2)
