@@ -7,24 +7,24 @@ from datetime import date
 import urllib.parse
 
 # --- 1. KONFIGURACJA ---
-st.set_page_config(page_title="Eurorama v8.5", page_icon="🖼️", layout="wide")
+st.set_page_config(page_title="Eurorama v8.6", page_icon="🖼️", layout="wide")
 
 VAT = 1.23
 DEFAULT_FILE = "cennik.csv"
+LOGO_FILE = "logo.png"
 HASLO_ADMINA = "Admin123"
 
-# Inicjalizacja pamięci sesji (Session State)
-if 'calc_done' not in st.session_state:
-    st.session_state.calc_done = False
-if 'results' not in st.session_state:
-    st.session_state.results = {}
-if 'input_text' not in st.session_state:
-    st.session_state.input_text = ""
+# Inicjalizacja pamięci sesji
+if 'calc_done' not in st.session_state: st.session_state.calc_done = False
+if 'results' not in st.session_state: st.session_state.results = {}
+if 'input_text' not in st.session_state: st.session_state.input_text = ""
+if 'notes' not in st.session_state: st.session_state.notes = ""
 
 def reset_all():
     st.session_state.calc_done = False
     st.session_state.results = {}
     st.session_state.input_text = ""
+    st.session_state.notes = ""
 
 # --- 2. STYLIZACJA (DARK MODE) ---
 st.markdown("""
@@ -44,6 +44,10 @@ st.markdown("""
     h1, h2, h3, p, label, span { color: #ffffff !important; }
     </style>
     """, unsafe_allow_html=True)
+
+# Wyświetlanie Logo na start
+if os.path.exists(LOGO_FILE):
+    st.image(LOGO_FILE, width=250)
 
 # --- 3. FUNKCJE ---
 def load_db():
@@ -82,22 +86,23 @@ def create_pdf(d):
 
 db = load_db()
 
-# --- 4. INTERFEJS ---
+# --- 4. PANEL ADMINA ---
 st.sidebar.header("🔐 Admin")
 pw = st.sidebar.text_input("Hasło", type="password")
 if pw == HASLO_ADMINA:
-    up = st.sidebar.file_uploader("Wgraj cennik", type=['csv'])
+    up = st.sidebar.file_uploader("Wgraj cennik CSV", type=['csv'])
     if up:
         with open(DEFAULT_FILE, "wb") as f: f.write(up.getbuffer())
-        st.sidebar.success("OK!")
+        st.sidebar.success("Plik zapisany!")
 
+# --- 5. INTERFEJS GŁÓWNY ---
 st.header("Eurorama Twój Dostawca Ram")
 
 col_in1, col_in2 = st.columns([2, 1])
 with col_in1:
     user_input = st.text_input("Kod i wymiary (np. 34 50 60)", key="input_text")
 with col_in2:
-    wycena_date = st.date_input("Data", date.today())
+    wycena_date = st.date_input("Data wyceny", date.today())
 
 m_col1, m_col2 = st.columns(2)
 mar_l = m_col1.number_input("Marża Listwa [%]", value=50)
@@ -106,7 +111,8 @@ mar_r = m_col2.number_input("Marża Rama [%]", value=35)
 with st.expander("💰 Dodatki i Uwagi"):
     ex_l = st.number_input("Dodatek Listwa [zł]", value=0.0)
     ex_r = st.number_input("Dodatek Rama [zł]", value=0.0)
-    user_notes = st.text_area("Uwagi do wyceny", placeholder="Wpisz tutaj dodatkowe informacje...")
+    # Zapisujemy uwagi do session_state, by nie zniknęły przy wyborze opcji
+    st.session_state.notes = st.text_area("Uwagi do wyceny", value=st.session_state.notes)
 
 c_btn1, c_btn2 = st.columns(2)
 if c_btn1.button("🚀 WYCEŃ", type="primary"):
@@ -123,60 +129,71 @@ if c_btn1.button("🚀 WYCEŃ", type="primary"):
                 
                 st.session_state.results = {
                     'kod': k.upper(), 's': s, 'w': w, 'mb': mb,
-                    'p_l': c_p_l, 'p_r': c_p_r,
+                    'prod_l': round(c_p_l, 2), 'prod_r': round(c_p_r, 2),
                     'f_l': round((c_p_l * (1 + mar_l/100)) + ex_l, 2),
                     'f_r': round((c_p_r * (1 + mar_r/100)) + ex_r, 2)
                 }
                 st.session_state.calc_done = True
-            else: st.error("Brak kodu!")
-        else: st.warning("Podaj wymiary!")
+            else: st.error("Nie znaleziono kodu!")
+        else: st.warning("Wpisz kod i wymiary!")
 
 if c_btn2.button("🧹 NOWA WYCENA"):
     reset_all()
     st.rerun()
 
-# --- 5. WYŚWIETLANIE WYNIKÓW ---
+# --- 6. WYNIKI ---
 if st.session_state.calc_done:
     res = st.session_state.results
     st.divider()
-    st.markdown(f"**Profil:** {res['kod']} | **Format:** {res['s']}x{res['w']} cm | **Zużycie:** {res['mb']:.2f} mb")
+    st.write(f"📊 **Materiały:** {res['mb']:.2f} mb listwy | Profil: {res['kod']} | Format: {res['s']}x{res['w']} cm")
     
     col_res1, col_res2 = st.columns(2)
     
     with col_res1:
-        st.markdown(f"<div class='price-card'><h3>📦 LISTWA</h3><h2 style='color:#0e63d1'>{res['f_l']} zł</h2></div>", unsafe_allow_html=True)
-        if st.button("Wybierz Listwę", key="btn_l"):
-            st.session_state.selected = "Listwa"
+        st.markdown(f"""
+            <div class='price-card'>
+                <h3>📦 LISTWA</h3>
+                <h2 style='color:#0e63d1'>{res['f_l']} zł</h2>
+                <p style='font-size: 0.8em; color: #aaa;'>Hurt + VAT: {res['prod_l']} zł</p>
+            </div>
+        """, unsafe_allow_html=True)
+        if st.button("Wybierz Opcję Listwa", key="sel_l"):
+            st.session_state.selected_opcja = "Listwa"
             st.session_state.final_price = res['f_l']
 
     with col_res2:
-        st.markdown(f"<div class='price-card'><h3>🖼️ W RAMIE</h3><h2 style='color:#0e63d1'>{res['f_r']} zł</h2></div>", unsafe_allow_html=True)
-        if st.button("Wybierz Ramę", key="btn_r"):
-            st.session_state.selected = "Rama"
+        st.markdown(f"""
+            <div class='price-card'>
+                <h3>🖼️ W RAMIE</h3>
+                <h2 style='color:#0e63d1'>{res['f_r']} zł</h2>
+                <p style='font-size: 0.8em; color: #aaa;'>Hurt + VAT: {res['prod_r']} zł</p>
+            </div>
+        """, unsafe_allow_html=True)
+        if st.button("Wybierz Opcję Rama", key="sel_r"):
+            st.session_state.selected_opcja = "Rama"
             st.session_state.final_price = res['f_r']
 
-    # PANEL EKSPORTU (pojawia się po wybraniu opcji)
-    if 'selected' in st.session_state:
-        st.success(f"### Wybrano: {st.session_state.selected}")
+    # PANEL EKSPORTU (Pojawia się po kliknięciu Wybierz)
+    if 'selected_opcja' in st.session_state:
+        st.success(f"### Wybrano: {st.session_state.selected_opcja}")
         
-        # Przygotowanie danych do SMS
-        sms_text = f"Eurorama Wycena {wycena_date}: {st.session_state.selected} {res['kod']}, {res['s']}x{res['w']}cm. Do zaplaty: {st.session_state.final_price}zl. Uwagi: {user_notes}"
-        encoded_sms = urllib.parse.quote(sms_text)
+        # Przygotowanie SMS
+        sms_body = f"Eurorama: Wycena {wycena_date}. {st.session_state.selected_opcja} {res['kod']}, {res['s']}x{res['w']}cm. Do zaplaty: {st.session_state.final_price}zl. Uwagi: {st.session_state.notes}"
+        enc_sms = urllib.parse.quote(sms_body)
         
-        col_ex1, col_ex2 = st.columns(2)
-        
-        with col_ex1:
-            # Przycisk PDF
-            pdf_data = {
+        ex_col1, ex_col2 = st.columns(2)
+        with ex_col1:
+            # Generowanie PDF
+            pdf_payload = {
                 'data': wycena_date, 'kod': res['kod'], 'format': f"{res['s']}x{res['w']}",
-                'opcja': st.session_state.selected, 'cena': st.session_state.final_price, 'uwagi': user_notes
+                'opcja': st.session_state.selected_opcja, 'cena': st.session_state.final_price, 
+                'uwagi': st.session_state.notes
             }
-            pdf_bytes = create_pdf(pdf_data)
+            pdf_bytes = create_pdf(pdf_payload)
             st.download_button("📥 Pobierz PDF", data=pdf_bytes, file_name=f"wycena_{res['kod']}.pdf", mime="application/pdf", use_container_width=True)
-
-        with col_ex2:
-            # Przycisk SMS (Link HTML)
-            st.markdown(f'<a href="sms:?body={encoded_sms}" class="sms-btn">📱 Wyślij SMS</a>', unsafe_allow_html=True)
-            st.caption("Kliknij powyżej, aby otworzyć aplikację SMS na telefonie.")
+        
+        with ex_col2:
+            # Przycisk SMS
+            st.markdown(f'<a href="sms:?body={enc_sms}" class="sms-btn">📱 Wyślij SMS</a>', unsafe_allow_html=True)
 
 st.markdown(f'<div class="footer"><p>📞 Zadzwoń: <b>15 876 30 16</b></p></div>', unsafe_allow_html=True)
