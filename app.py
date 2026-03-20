@@ -7,7 +7,7 @@ from datetime import datetime
 import urllib.parse
 
 # --- 1. KONFIGURACJA ---
-st.set_page_config(page_title="Eurorama Ekspert v9.2", page_icon="🖼️", layout="wide")
+st.set_page_config(page_title="EuroRama Ekspert v9.2", page_icon="🖼️", layout="wide")
 
 # Stałe
 VAT = 1.23
@@ -100,7 +100,7 @@ def create_pdf_bytes(d):
     pdf.multi_cell(0, 10, f"Uwagi: {uwagi_clean}")
     pdf.ln(20)
     pdf.set_font("Helvetica", '', 9)
-    pdf.cell(0, 10, "Dziekujemy za wybranie Eurorama!", align='C')
+    pdf.cell(0, 10, "Dziekujemy za wybranie EuroRama!", align='C')
     return bytes(pdf.output())
 
 db = load_db()
@@ -122,7 +122,7 @@ if pw == HASLO_ADMINA:
         st.sidebar.success("Cennik zapisany!")
 
 # --- 6. GŁÓWNY INTERFEJS (WYCENA) ---
-st.header("Eurorama Twój Dostawca Ram")
+st.header("EuroRama Twój Dostawca Ram")
 
 if not db:
     st.error("Błąd: Nie załadowano cennika. Wgraj plik cennik.csv w panelu bocznym.")
@@ -219,7 +219,7 @@ if st.session_state.calc_results:
         st.divider()
         st.subheader(f"✅ Wybrano: {st.session_state.selected_option}")
         
-        sms_text = f"Eurorama: Wycena {res['date']}. {st.session_state.selected_option} {res['kod']}, {res['s']}x{res['w']}cm. Cena: {st.session_state.active_price}zl. {res['notes']}"
+        sms_text = f"EuroRama: Wycena {res['date']}. {st.session_state.selected_option} {res['kod']}, {res['s']}x{res['w']}cm. Cena: {st.session_state.active_price}zl. {res['notes']}"
         encoded_sms = urllib.parse.quote(sms_text)
         
         exp_col1, exp_col2 = st.columns(2)
