@@ -1,2 +1,2 @@
 # wycena-oprawy
-wycena oprawy ramek
+wycena oprawy ramek Eurorama
