@@ -7,7 +7,7 @@ from datetime import datetime
 import urllib.parse
 
 # --- 1. KONFIGURACJA ---
-st.set_page_config(page_title="EuroRama Ekspert v9.4", page_icon="🖼️", layout="wide")
+st.set_page_config(page_title="EuroRama Ekspert v9.5", page_icon="🖼️", layout="wide")
 
 # Stałe
 VAT = 1.23
@@ -16,11 +16,13 @@ LOGO_FILE = "logo.png"
 HASLO_ADMINA = "Admin123" # Twoje hasło
 
 # --- 2. OBSŁUGA LINKÓW (URL PARAMETERS) ---
-# Pobieramy wartości z linku, jeśli istnieją, w przeciwnym razie dajemy domyślne
 params = st.query_params
 
 def get_param(key, default):
-    return float(params.get(key, default))
+    try:
+        return float(params.get(key, default))
+    except:
+        return float(default)
 
 # --- 3. PAMIĘĆ SESJI ---
 if 'history' not in st.session_state:
@@ -102,24 +104,27 @@ def create_pdf_bytes(d):
 
 db = load_db()
 
-# --- 6. PANEL BOCZNY (USTAWIENIA) ---
+# --- 6. PANEL BOCZNY (USTAWIENIA PERSONALIZOWANE) ---
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, use_container_width=True)
 
 st.sidebar.header("⚙️ Twój Profil Cenowy")
-# Inicjalizacja wartości z linku lub domyślnych
 c_szklo = st.sidebar.number_input("Szkło [zł/m2]", value=get_param('gs', 43.0))
 c_antyr = st.sidebar.number_input("Antyreflex [zł/m2]", value=get_param('as', 85.0))
 c_tyl = st.sidebar.number_input("Tył / HDF [zł/m2]", value=get_param('bs', 30.0))
 c_min = st.sidebar.number_input("Cena min. [zł]", value=get_param('mi', 25.0))
 
-if st.sidebar.button("💾 Zapisz moje ceny w linku"):
-    # Tworzymy nowe parametry URL
+st.sidebar.subheader("Domyślne Marże")
+def_m_l = st.sidebar.number_input("Marża Listwa [%]", value=int(get_param('ml', 50)))
+def_m_r = st.sidebar.number_input("Marża Rama [%]", value=int(get_param('mr', 35)))
+
+if st.sidebar.button("💾 Zapisz moje ustawienia w linku"):
     new_params = {
-        'gs': c_szklo, 'as': c_antyr, 'bs': c_tyl, 'mi': c_min
+        'gs': c_szklo, 'as': c_antyr, 'bs': c_tyl, 'mi': c_min,
+        'ml': def_m_l, 'mr': def_m_r
     }
     st.query_params.from_dict(new_params)
-    st.sidebar.success("Ustawienia zapisane w adresie! Skopiuj link z góry przeglądarki i dodaj do zakładek.")
+    st.sidebar.success("Zapisano! Skopiuj link z góry przeglądarki.")
 
 st.sidebar.divider()
 st.sidebar.header("🔐 Admin")
@@ -149,8 +154,8 @@ else:
         with r2_c2: in_h = st.number_input("Wysokość [cm]", min_value=1.0, value=60.0)
 
         r3_c1, r3_c2 = st.columns(2)
-        with r3_c1: m_l = st.number_input("Marża Listwa [%]", value=int(get_param('ml', 50)))
-        with r3_c2: m_r = st.number_input("Marża Rama [%]", value=int(get_param('mr', 35)))
+        with r3_c1: m_l = st.number_input("Aktualna Marża Listwa [%]", value=def_m_l)
+        with r3_c2: m_r = st.number_input("Aktualna Marża Rama [%]", value=def_m_r)
 
     with st.expander("📝 Dodatki i Uwagi"):
         c1, c2, c3 = st.columns(3)
