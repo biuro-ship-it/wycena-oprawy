@@ -3,57 +3,56 @@ import pandas as pd
 import re
 import os
 from fpdf import FPDF
-from datetime import date
+from datetime import datetime
 import urllib.parse
 
-# --- 1. KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Eurorama v8.7", page_icon="🖼️", layout="wide")
+# --- 1. KONFIGURACJA ---
+st.set_page_config(page_title="Eurorama Ekspert v9.1", page_icon="🖼️", layout="wide")
 
-# Parametry
+# Stałe
 VAT = 1.23
 DEFAULT_FILE = "cennik.csv"
 LOGO_FILE = "logo.png"
-HASLO_ADMINA = "Admin123" # Twoje hasło
+HASLO_ADMINA = "Admin123"
 
-# --- 2. INICJALIZACJA PAMIĘCI (SESSION STATE) ---
+# --- 2. PAMIĘĆ SESJI ---
+if 'history' not in st.session_state:
+    st.session_state.history = []
 if 'calc_results' not in st.session_state:
     st.session_state.calc_results = None
 if 'selected_option' not in st.session_state:
     st.session_state.selected_option = None
-if 'user_notes' not in st.session_state:
-    st.session_state.user_notes = ""
 
 def reset_app():
     st.session_state.calc_results = None
     st.session_state.selected_option = None
-    st.session_state.user_notes = ""
     st.rerun()
 
-# --- 3. STYLIZACJA DARK MODE ---
+# --- 3. DESIGN (DARK MODE) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #1e1e1e; color: #ffffff; }
+    .stApp { background-color: #121212; color: #e0e0e0; }
+    .stSelectbox div[data-baseweb="select"] { background-color: #1e1e1e !important; }
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stTextArea>div>div>textarea {
-        background-color: #2d2d2d !important; color: #ffffff !important; border: 1px solid #444 !important;
+        background-color: #1e1e1e !important; color: #ffffff !important; border: 1px solid #333 !important;
     }
     .price-card {
-        border: 2px solid #0e63d1; padding: 20px; border-radius: 15px; background-color: #2d2d2d;
-        color: #ffffff; text-align: center; margin-bottom: 15px;
+        border: 2px solid #0e63d1; padding: 25px; border-radius: 15px; background-color: #1e1e1e;
+        color: #ffffff; text-align: center; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    .history-card {
+        background-color: #252525; padding: 10px; border-radius: 8px; margin-bottom: 5px; border-left: 4px solid #0e63d1;
     }
     .sms-btn {
-        display: inline-block; padding: 12px 24px; background-color: #25d366; color: white !important;
-        text-decoration: none; border-radius: 10px; font-weight: bold; width: 100%; text-align: center;
-        margin-top: 10px; border: none;
+        display: inline-block; padding: 12px 24px; background-color: #28a745; color: white !important;
+        text-decoration: none; border-radius: 10px; font-weight: bold; width: 100%; text-align: center; margin-top: 10px;
     }
+    .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: #121212; text-align: center; padding: 10px; border-top: 2px solid #0e63d1; z-index: 100; color: #ffffff; }
     h1, h2, h3, p, label, span { color: #ffffff !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# Wyświetlanie Logo
-if os.path.exists(LOGO_FILE):
-    st.image(LOGO_FILE, width=220)
-
-# --- 4. FUNKCJE POMOCNICZE ---
+# --- 4. FUNKCJE ---
 def load_db():
     if not os.path.exists(DEFAULT_FILE): return None
     try:
@@ -62,7 +61,7 @@ def load_db():
         for _, row in df.iterrows():
             try:
                 k = str(row[0]).strip().lower()
-                if k == "" or "profil" in k: continue
+                if k == "" or "profil" in k or "kolumna" in k: continue
                 if k.endswith('.0'): k = k[:-2]
                 data[k] = {
                     "cl": float(str(row[2]).replace(',','.')), 
@@ -74,146 +73,164 @@ def load_db():
     except: return None
 
 def create_pdf_bytes(d):
-    # Generowanie PDF jako bajty (naprawia błąd Streamlit)
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", 'B', 16)
-    pdf.cell(0, 10, "WYCENA OPRAWY - EURORAMA", ln=True, align='C')
+    if os.path.exists(LOGO_FILE):
+        pdf.image(LOGO_FILE, x=10, y=8, w=40)
+    pdf.set_font("Helvetica", 'B', 18)
+    pdf.cell(0, 15, "POTWIERDZENIE WYCENY", ln=True, align='C')
+    pdf.set_font("Helvetica", '', 11)
+    pdf.cell(0, 10, f"Data wyceny: {d['data']}", ln=True, align='R')
     pdf.ln(10)
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, "Szczegoly zamowienia:", ln=True)
     pdf.set_font("Helvetica", '', 12)
-    pdf.cell(0, 10, f"Data: {d['data']}", ln=True)
-    pdf.cell(0, 10, f"Kod listwy: {d['kod']}", ln=True)
-    pdf.cell(0, 10, f"Format: {d['format']} cm", ln=True)
-    pdf.cell(0, 10, f"Opcja: {d['opcja']}", ln=True)
+    pdf.cell(0, 10, f"- Kod listwy: {d['kod']}", ln=True)
+    pdf.cell(0, 10, f"- Format obrazu: {d['format']} cm", ln=True)
+    pdf.cell(0, 10, f"- Wybrana opcja: {d['opcja']}", ln=True)
     pdf.ln(5)
-    pdf.set_font("Helvetica", 'B', 14)
-    pdf.cell(0, 10, f"DO ZAPLATY: {d['cena']} PLN", ln=True)
-    pdf.ln(10)
-    pdf.set_font("Helvetica", '', 10)
-    # Usuwamy polskie znaki dla pewności, że PDF się nie wywali w chmurze bez czcionek
-    uwagi_safe = d['uwagi'].encode('ascii', 'ignore').decode('ascii')
-    pdf.multi_cell(0, 10, f"Uwagi: {uwagi_safe}")
+    pdf.set_font("Helvetica", 'B', 16)
+    pdf.set_text_color(14, 99, 209)
+    pdf.cell(0, 15, f"KWOTA DO ZAPLATY: {d['cena']} PLN", ln=True, align='L')
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(5)
+    pdf.set_font("Helvetica", 'I', 10)
+    uwagi_clean = d['uwagi'].encode('ascii', 'ignore').decode('ascii')
+    pdf.multi_cell(0, 10, f"Uwagi: {uwagi_clean}")
+    pdf.ln(20)
+    pdf.set_font("Helvetica", '', 9)
+    pdf.cell(0, 10, "Dziekujemy za wybranie Eurorama!", align='C')
     return bytes(pdf.output())
 
 db = load_db()
 
-# --- 5. PANEL ADMINA ---
-st.sidebar.header("🔐 Panel Admina")
-pass_in = st.sidebar.text_input("Hasło", type="password")
-if pass_in == HASLO_ADMINA:
-    f_up = st.sidebar.file_uploader("Wgraj cennik", type=['csv'])
-    if f_up:
-        with open(DEFAULT_FILE, "wb") as f: f.write(f_up.getbuffer())
-        st.sidebar.success("Zaktualizowano!")
+# --- 5. PANEL BOCZNY ---
+if os.path.exists(LOGO_FILE):
+    st.sidebar.image(LOGO_FILE, use_container_width=True)
 
-# --- 6. INTERFEJS GŁÓWNY ---
+st.sidebar.header("⚙️ Ustawienia")
+mar_l = st.sidebar.number_input("Marża Listwa [%]", value=50)
+mar_r = st.sidebar.number_input("Marża Rama [%]", value=35)
+cena_min = st.sidebar.number_input("Cena minimalna [zł]", value=25.0)
+
+st.sidebar.divider()
+st.sidebar.header("🔐 Admin")
+pw = st.sidebar.text_input("Hasło", type="password")
+if pw == HASLO_ADMINA:
+    up = st.sidebar.file_uploader("Zaktualizuj cennik", type=['csv'])
+    if up:
+        with open(DEFAULT_FILE, "wb") as f: f.write(up.getbuffer())
+        st.sidebar.success("Cennik zapisany!")
+
+# --- 6. GŁÓWNY INTERFEJS ---
 st.header("Eurorama Twój Dostawca Ram")
 
-col1, col2 = st.columns([2, 1])
-with col1:
-    user_input = st.text_input("Kod i wymiary (np. 34 50 60)", key="main_input")
-with col2:
-    wycena_date = st.date_input("Data wyceny", date.today())
+if not db:
+    st.error("Błąd: Nie załadowano cennika. Wgraj plik cennik.csv w panelu bocznym.")
+else:
+    # SEKCJA WYBORU LISTWY I WYMIARÓW
+    with st.container():
+        row1_col1, row1_col2 = st.columns([2, 1])
+        
+        with row1_col1:
+            codes = sorted(list(db.keys()))
+            selected_code = st.selectbox("Wybierz kod listwy (wpisz numer, aby szukać):", options=codes, index=0)
+            
+        with row1_col2:
+            w_date = st.date_input("Data", datetime.now())
 
-m_col1, m_col2 = st.columns(2)
-mar_l = m_col1.number_input("Marża Listwa [%]", value=60)
-mar_r = m_col2.number_input("Marża Rama [%]", value=45)
+        row2_col1, row2_col2 = st.columns(2)
+        with row2_col1:
+            input_w = st.number_input("Szerokość obrazu [cm]", min_value=1.0, value=50.0, step=1.0)
+        with row2_col2:
+            input_h = st.number_input("Wysokość obrazu [cm]", min_value=1.0, value=60.0, step=1.0)
 
-with st.expander("💰 Dodatki i Uwagi"):
-    e1, e2 = st.columns(2)
-    extra_l = e1.number_input("Dodatek Listwa [zł]", value=0.0)
-    extra_r = e2.number_input("Dodatek Rama [zł]", value=0.0)
-    st.session_state.user_notes = st.text_area("Uwagi do zamówienia", value=st.session_state.user_notes)
+    with st.expander("📝 Dodatki i Uwagi"):
+        c_ex1, c_ex2 = st.columns(2)
+        extra_l = c_ex1.number_input("Dodatek Listwa [zł]", value=0.0)
+        extra_r = c_ex2.number_input("Dodatek Rama [zł]", value=0.0)
+        user_notes = st.text_area("Uwagi do zamówienia", placeholder="Wpisz np. rodzaj szkła...")
 
-# Przyciski główne
-b1, b2 = st.columns(2)
-if b1.button("🚀 WYCEŃ", type="primary"):
-    if db:
-        nums = re.findall(r'\d+', user_input)
-        if len(nums) >= 2:
-            k = nums[0].lower()
-            s, w = float(nums[1]), (float(nums[2]) if len(nums) > 2 else float(nums[1]))
-            if k in db:
-                item = db[k]
-                mb = ((2*s)+(2*w)+(8*item['sz']))/100
-                c_p_l = (mb * item['cl']) * VAT
-                c_p_r = (mb * item['cr']) * VAT
-                
-                # Zapisujemy wyniki do sesji
-                st.session_state.calc_results = {
-                    'kod': k.upper(), 's': s, 'w': w, 'mb': mb,
-                    'prod_l': round(c_p_l, 2), 'prod_r': round(c_p_r, 2),
-                    'f_l': round((c_p_l * (1 + mar_l/100)) + extra_l, 2),
-                    'f_r': round((c_p_r * (1 + mar_r/100)) + extra_r, 2)
-                }
-                st.session_state.selected_option = None # Reset wyboru przy nowej wycenie
-            else: st.error("Brak kodu!")
-        else: st.warning("Podaj wymiary!")
+    col_btn1, col_btn2 = st.columns(2)
+    
+    if col_btn1.button("🚀 WYCEŃ", type="primary", use_container_width=True):
+        item = db[selected_code]
+        mb = ((2 * input_w) + (2 * input_h) + (8 * item['sz'])) / 100
+        
+        c_prod_l = (mb * item['cl']) * VAT
+        c_prod_r = (mb * item['cr']) * VAT
+        
+        final_l = max(round((c_prod_l * (1 + mar_l/100)) + extra_l, 2), cena_min)
+        final_r = max(round((c_prod_r * (1 + mar_r/100)) + extra_r, 2), cena_min)
+        
+        st.session_state.calc_results = {
+            'kod': selected_code.upper(), 's': input_w, 'w': input_h, 'mb': mb,
+            'prod_l': round(c_prod_l, 2), 'prod_r': round(c_prod_r, 2),
+            'f_l': final_l, 'f_r': final_r,
+            'notes': user_notes, 'date': w_date
+        }
+        st.session_state.selected_option = None
+        
+        # Historia
+        hist_entry = f"{w_date.strftime('%H:%M')} - {selected_code.upper()} ({input_w}x{input_h}) -> {final_r} zł"
+        st.session_state.history.insert(0, hist_entry)
+        st.session_state.history = st.session_state.history[:5]
 
-if b2.button("🧹 NOWA WYCENA"):
-    reset_app()
+    if col_btn2.button("🧹 NOWA WYCENA", use_container_width=True):
+        reset_app()
 
-# --- 7. WYŚWIETLANIE WYNIKÓW ---
+# --- 7. WYNIKI I EKSPORT ---
 if st.session_state.calc_results:
     res = st.session_state.calc_results
     st.divider()
-    st.markdown(f"📊 **Materiał:** {res['mb']:.2f} mb | Profil: {res['kod']} | Format: {res['s']}x{res['w']} cm")
+    st.markdown(f"📈 **Materiały:** {res['mb']:.2f} mb listwy | **Format:** {res['s']}x{res['w']} cm")
     
-    r_col1, r_col2 = st.columns(2)
+    res_col1, res_col2 = st.columns(2)
     
-    with r_col1:
+    with res_col1:
         st.markdown(f"""<div class='price-card'>
             <h3>📦 LISTWA</h3><h2 style='color:#0e63d1'>{res['f_l']} zł</h2>
-            <p style='color:#aaa !important; font-size:0.8em'>Hurt + VAT: {res['prod_l']} zł</p>
+            <p style='color:#888 !important; font-size:0.8em'>Producent + VAT: {res['prod_l']} zł</p>
         </div>""", unsafe_allow_html=True)
-        if st.button("Wybierz Opcję Listwa"):
-            st.session_state.selected_option = "Listwa"
+        if st.button("Wybierz Opcję Listwa", use_container_width=True):
+            st.session_state.selected_option = "Sama Listwa"
             st.session_state.active_price = res['f_l']
 
-    with r_col2:
+    with res_col2:
         st.markdown(f"""<div class='price-card'>
             <h3>🖼️ W RAMIE</h3><h2 style='color:#0e63d1'>{res['f_r']} zł</h2>
-            <p style='color:#aaa !important; font-size:0.8em'>Hurt + VAT: {res['prod_r']} zł</p>
+            <p style='color:#888 !important; font-size:0.8em'>Producent + VAT: {res['prod_r']} zł</p>
         </div>""", unsafe_allow_html=True)
-        if st.button("Wybierz Opcję Rama"):
-            st.session_state.selected_option = "Rama"
+        if st.button("Wybierz Opcję Rama", use_container_width=True):
+            st.session_state.selected_option = "Gotowa Rama"
             st.session_state.active_price = res['f_r']
 
-    # --- 8. PANEL EKSPORTU (TYLKO PO WYBORZE) ---
     if st.session_state.selected_option:
         st.divider()
         st.subheader(f"✅ Wybrano: {st.session_state.selected_option}")
         
-        opt = st.session_state.selected_option
-        prc = st.session_state.active_price
-        notes = st.session_state.user_notes
-        
-        # Przygotowanie SMS
-        sms_body = f"Eurorama: Wycena {wycena_date}. {opt} {res['kod']}, {res['s']}x{res['w']}cm. Cena: {prc}zl. {notes}"
+        sms_body = f"Eurorama: Wycena {res['date']}. {st.session_state.selected_option} {res['kod']}, {res['s']}x{res['w']}cm. Cena: {st.session_state.active_price}zl. {res['notes']}"
         encoded_sms = urllib.parse.quote(sms_body)
         
-        ex1, ex2 = st.columns(2)
-        
-        with ex1:
-            # Naprawiony przycisk PDF
+        exp_col1, exp_col2 = st.columns(2)
+        with exp_col1:
             pdf_data = {
-                'data': wycena_date, 'kod': res['kod'], 'format': f"{res['s']}x{res['w']}",
-                'opcja': opt, 'cena': prc, 'uwagi': notes
+                'data': res['date'], 'kod': res['kod'], 'format': f"{res['s']}x{res['w']}",
+                'opcja': st.session_state.selected_option, 'cena': st.session_state.active_price, 'uwagi': res['notes']
             }
             try:
                 p_bytes = create_pdf_bytes(pdf_data)
-                st.download_button(
-                    label="📥 Pobierz PDF",
-                    data=p_bytes,
-                    file_name=f"wycena_{res['kod']}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"Błąd PDF: {e}")
-
-        with ex2:
-            # Przycisk SMS
+                st.download_button("📥 Pobierz PDF", data=p_bytes, file_name=f"wycena_{res['kod']}.pdf", mime="application/pdf", use_container_width=True)
+            except Exception as e: st.error(f"PDF Error: {e}")
+        
+        with exp_col2:
             st.markdown(f'<a href="sms:?body={encoded_sms}" class="sms-btn">📱 Wyślij SMS</a>', unsafe_allow_html=True)
+
+# --- 8. HISTORIA ---
+if st.session_state.history:
+    st.write("---")
+    st.subheader("🕒 Ostatnie 5 wycen")
+    for h in st.session_state.history:
+        st.markdown(f"<div class='history-card'>{h}</div>", unsafe_allow_html=True)
 
 st.markdown(f'<div class="footer"><p>📞 Zadzwoń: <b>15 876 30 16</b></p></div>', unsafe_allow_html=True)
