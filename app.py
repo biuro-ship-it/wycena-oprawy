@@ -256,13 +256,13 @@ if st.session_state.history:
     for h in st.session_state.history:
         st.markdown(f"<div class='history-card'>{h}</div>", unsafe_allow_html=True)
 
-# --- 7. STOPKA Z LINKIEM DO INSTRUKCJI ---
+# --- 7. STOPKA Z LINKIEM DO INSTRUKCJI PDF ---
 st.markdown(f'''
     <div class="footer">
         <p style="margin:0;">📞 Zadzwoń: <b>15 876 30 16</b></p>
         <p style="margin:0; font-size:0.85em; margin-top:5px;">
-            <a href="https://github.com/biuro-ship-it/wycena-oprawy/blob/53ed004180e127fb3890a2306a51f4ff11fac35d/INSTRUKCJA_OBSLUGI.md" target="_blank" style="color: #0e63d1; text-decoration: none; font-weight: bold;">
-                📖 KLIKNIJ TUTAJ, ABY OTWORZYĆ INSTRUKCJĘ OBSŁUGI
+            <a href="https://godek.eu/upload/instrukcja.pdf" target="_blank" style="color: #0e63d1; text-decoration: none; font-weight: bold;">
+                📖 KLIKNIJ TUTAJ, ABY OTWORZYĆ INSTRUKCJĘ OBSŁUGI (PDF)
             </a>
         </p>
     </div>
