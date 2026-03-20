@@ -169,7 +169,7 @@ def_m_r = st.sidebar.number_input("Marża Rama [%]", value=int(get_url_param('mr
 
 if st.sidebar.button("💾 Zapisz moje ustawienia"):
     st.query_params.from_dict({'gs':c_szklo, 'as':c_antyr, 'bs':c_tyl, 'mi':c_min, 'ml':def_m_l, 'mr':def_m_r})
-    st.sidebar.success("Ustawienia zapisane!")
+    st.sidebar.success("Ustawienia zapisane! Zapisz ten link w zakładkach przeglądarki, abyś zawsze miał swoje ceny i marże.")
 
 st.sidebar.divider()
 st.sidebar.header("🔐 Panel Admina")
