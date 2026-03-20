@@ -7,7 +7,7 @@ from datetime import datetime
 import urllib.parse
 
 # --- 1. KONFIGURACJA ---
-st.set_page_config(page_title="EuroRama Ekspert v9.5", page_icon="🖼️", layout="wide")
+st.set_page_config(page_title="EuroRama Ekspert v9.6", page_icon="🖼️", layout="wide")
 
 # Stałe
 VAT = 1.23
@@ -37,7 +37,7 @@ def reset_app():
     st.session_state.selected_option = None
     st.rerun()
 
-# --- 4. DESIGN ---
+# --- 4. DESIGN (DARK MODE COMFORT) ---
 st.markdown("""
     <style>
     .stApp { background-color: #121212; color: #e0e0e0; }
@@ -86,7 +86,7 @@ def create_pdf_bytes(d):
     pdf.set_font("Helvetica", '', 11)
     pdf.cell(0, 10, f"Data wyceny: {d['data']}", ln=True, align='R')
     pdf.ln(10)
-    pdf.set_font("Helvetica", 'B', 12); pdf.cell(0, 10, "Szczegoly zamowienia:", ln=True)
+    pdf.set_font("Helvetica", 'B', 12); pdf.cell(0, 10, "Szczegóły zamówienia:", ln=True)
     pdf.set_font("Helvetica", '', 12)
     pdf.cell(0, 10, f"- Kod listwy: {d['kod']}", ln=True)
     pdf.cell(0, 10, f"- Format obrazu: {d['format']} cm", ln=True)
@@ -94,17 +94,17 @@ def create_pdf_bytes(d):
     if d['dodatki_text']: pdf.cell(0, 10, f"- Dodatki: {d['dodatki_text']}", ln=True)
     pdf.ln(5)
     pdf.set_font("Helvetica", 'B', 16); pdf.set_text_color(14, 99, 209)
-    pdf.cell(0, 15, f"KWOTA DO ZAPLATY: {d['cena']} PLN", ln=True, align='L')
+    pdf.cell(0, 15, f"KWOTA DO ZAPŁATY: {d['cena']} PLN", ln=True, align='L')
     pdf.set_text_color(0, 0, 0); pdf.ln(5); pdf.set_font("Helvetica", 'I', 10)
     uwagi_clean = d['uwagi'].encode('ascii', 'ignore').decode('ascii')
     pdf.multi_cell(0, 10, f"Uwagi: {uwagi_clean}")
     pdf.ln(20); pdf.set_font("Helvetica", '', 9)
-    pdf.cell(0, 10, "Dziekujemy za wybranie EuroRama!", align='C')
+    pdf.cell(0, 10, "Dziękujemy za wybranie EuroRama!", align='C')
     return bytes(pdf.output())
 
 db = load_db()
 
-# --- 6. PANEL BOCZNY (USTAWIENIA PERSONALIZOWANE) ---
+# --- 6. PANEL BOCZNY (TWOJE USTAWIENIA) ---
 if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, use_container_width=True)
 
@@ -114,17 +114,17 @@ c_antyr = st.sidebar.number_input("Antyreflex [zł/m2]", value=get_param('as', 8
 c_tyl = st.sidebar.number_input("Tył / HDF [zł/m2]", value=get_param('bs', 30.0))
 c_min = st.sidebar.number_input("Cena min. [zł]", value=get_param('mi', 25.0))
 
-st.sidebar.subheader("Domyślne Marże")
+st.sidebar.subheader("Twoje Stałe Marże")
 def_m_l = st.sidebar.number_input("Marża Listwa [%]", value=int(get_param('ml', 50)))
 def_m_r = st.sidebar.number_input("Marża Rama [%]", value=int(get_param('mr', 35)))
 
-if st.sidebar.button("💾 Zapisz moje ustawienia w linku"):
+if st.sidebar.button("💾 Zapisz ustawienia w linku"):
     new_params = {
         'gs': c_szklo, 'as': c_antyr, 'bs': c_tyl, 'mi': c_min,
         'ml': def_m_l, 'mr': def_m_r
     }
     st.query_params.from_dict(new_params)
-    st.sidebar.success("Zapisano! Skopiuj link z góry przeglądarki.")
+    st.sidebar.success("Zapisano! Skopiuj adres URL i dodaj do zakładek.")
 
 st.sidebar.divider()
 st.sidebar.header("🔐 Admin")
@@ -133,19 +133,19 @@ if pw == HASLO_ADMINA:
     up = st.sidebar.file_uploader("Wgraj cennik", type=['csv'])
     if up:
         with open(DEFAULT_FILE, "wb") as f: f.write(up.getbuffer())
-        st.sidebar.success("OK!")
+        st.sidebar.success("Baza zaktualizowana!")
 
 # --- 7. GŁÓWNY INTERFEJS ---
 st.header("EuroRama Twój Dostawca Ram")
 
 if not db:
-    st.error("Wgraj cennik.csv")
+    st.error("Proszę wgrać plik cennik.csv w panelu admina.")
 else:
     with st.container():
         r1_c1, r1_c2 = st.columns([2, 1])
         with r1_c1:
             codes = sorted(list(db.keys()))
-            sel_code = st.selectbox("Wybierz kod listwy:", options=codes, index=0)
+            sel_code = st.selectbox("Kod listwy:", options=codes, index=0)
         with r1_c2:
             w_date = st.date_input("Data", datetime.now())
 
@@ -153,17 +153,13 @@ else:
         with r2_c1: in_w = st.number_input("Szerokość [cm]", min_value=1.0, value=50.0)
         with r2_c2: in_h = st.number_input("Wysokość [cm]", min_value=1.0, value=60.0)
 
-        r3_c1, r3_c2 = st.columns(2)
-        with r3_c1: m_l = st.number_input("Aktualna Marża Listwa [%]", value=def_m_l)
-        with r3_c2: m_r = st.number_input("Aktualna Marża Rama [%]", value=def_m_r)
-
     with st.expander("📝 Dodatki i Uwagi"):
         c1, c2, c3 = st.columns(3)
         ch_sz = c1.checkbox("Szkło")
         ch_an = c2.checkbox("Antyreflex")
         ch_ty = c3.checkbox("Tył / HDF")
-        ex_man = st.number_input("Inny koszt [zł]", value=0.0)
-        u_notes = st.text_area("Uwagi")
+        ex_man = st.number_input("Inny koszt dodatkowy [zł]", value=0.0)
+        u_notes = st.text_area("Uwagi do zamówienia")
 
     b1, b2 = st.columns(2)
     if b1.button("🚀 WYCEŃ", type="primary", use_container_width=True):
@@ -177,13 +173,17 @@ else:
         if ch_an: d_netto += (m2 * c_antyr); txt.append("Antyreflex")
         if ch_ty: d_netto += (m2 * c_tyl); txt.append("Tył")
         
+        # Obliczenia bazowe
         c_p_l = (mb * item['cl']) * VAT
         c_p_r = (mb * item['cr']) * VAT
-        f_d_l = (d_netto * VAT * (1 + m_l/100)) + ex_man
-        f_d_r = (d_netto * VAT * (1 + m_r/100)) + ex_man
         
-        f_l = max(round(c_p_l * (1 + m_l/100) + f_d_l, 2), c_min)
-        f_r = max(round(c_p_r * (1 + m_r/100) + f_d_r, 2), c_min)
+        # Dodatki z marżą (używamy marż z panelu bocznego)
+        f_d_l = (d_netto * VAT * (1 + def_m_l/100)) + ex_man
+        f_d_r = (d_netto * VAT * (1 + def_m_r/100)) + ex_man
+        
+        # Cena końcowa (używamy marż z panelu bocznego)
+        f_l = max(round(c_p_l * (1 + def_m_l/100) + f_d_l, 2), c_min)
+        f_r = max(round(c_p_r * (1 + def_m_r/100) + f_d_r, 2), c_min)
         
         st.session_state.calc_results = {
             'kod': sel_code.upper(), 's': in_w, 'w': in_h, 'mb': mb, 'm2': m2,
@@ -192,7 +192,7 @@ else:
             'dodatki_txt': ", ".join(txt) if txt else "Brak"
         }
         st.session_state.selected_option = None
-        st.session_state.history.insert(0, f"{datetime.now().strftime('%H:%M')} - {sel_code.upper()} -> {f_r} zł")
+        st.session_state.history.insert(0, f"{datetime.now().strftime('%H:%M')} - {sel_code.upper()} ({in_w}x{in_h}) -> {f_r} zł")
 
     if b2.button("🧹 NOWA WYCENA", use_container_width=True):
         reset_app()
@@ -214,7 +214,7 @@ if st.session_state.calc_results:
 
     if st.session_state.selected_option:
         st.divider()
-        sms = f"EuroRama: Wycena {res['date']}. {st.session_state.selected_option} {res['kod']}, {res['s']}x{res['w']}cm. Cena: {st.session_state.active_price}zl."
+        sms = f"EuroRama: Wycena {res['date']}. {st.session_state.selected_option} {res['kod']}, {res['s']}x{res['w']}cm. Cena: {st.session_state.active_price}zł."
         ex1, ex2 = st.columns(2)
         with ex1:
             pdf_b = create_pdf_bytes({'data': res['date'], 'kod': res['kod'], 'format': f"{res['s']}x{res['w']}", 'opcja': st.session_state.selected_option, 'cena': st.session_state.active_price, 'uwagi': res['notes'], 'dodatki_text': res['dodatki_txt']})
